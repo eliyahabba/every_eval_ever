@@ -289,6 +289,32 @@ def build_parser() -> argparse.ArgumentParser:
         help='One or more JSON files or directories containing JSON files.',
     )
 
+    hf_parser = subparsers.add_parser(
+        'hf-eval-results',
+        help='Convert EEE aggregate JSON to Hugging Face .eval_results YAML',
+        description='Convert EEE aggregate JSON records to Hugging Face Community Evals YAML.',
+    )
+    hf_parser.add_argument('paths', nargs='+', help='EEE aggregate JSON files.')
+    hf_parser.add_argument(
+        '--output-dir',
+        default='hf_eval_results',
+        help='Directory where generated .eval_results files are written.',
+    )
+    hf_parser.add_argument(
+        '--flat',
+        action='store_true',
+        help='Write directly to OUTPUT_DIR/.eval_results for a single model repo.',
+    )
+    hf_parser.add_argument(
+        '--mapping-json',
+        help='Optional JSON file with additional EEE benchmark -> HF task mappings.',
+    )
+    hf_parser.add_argument(
+        '--source-base-url',
+        default=None,
+        help='Base URL for EEE datastore backlinks.',
+    )
+
     convert_parser = subparsers.add_parser(
         'convert',
         help='Convert source eval logs to every_eval_ever',
@@ -411,6 +437,18 @@ def main(argv: list[str] | None = None) -> int:
         )
 
         return check_duplicates_main(args.paths)
+
+    if args.command == 'hf-eval-results':
+        from every_eval_ever.hf_eval_results import main as hf_eval_results_main
+
+        hf_args = [*args.paths, '--output-dir', args.output_dir]
+        if args.flat:
+            hf_args.append('--flat')
+        if args.mapping_json:
+            hf_args.extend(['--mapping-json', args.mapping_json])
+        if args.source_base_url:
+            hf_args.extend(['--source-base-url', args.source_base_url])
+        return hf_eval_results_main(hf_args)
 
     if args.command == 'convert':
         if args.source == 'lm_eval':
