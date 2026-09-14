@@ -420,18 +420,8 @@ MODEL_REGISTRY: dict[str, dict] = {
                        "content with source_lang/target_lang passed in translation_options, so "
                        "there is no natural-language prompt",
     },
-    "Cohere Command A": {
-        # Same model as "Command A" (confirmed), served directly by Cohere rather
-        # than through OpenRouter. They are NOT two halves of one run: all 2272
-        # "Cohere Command A" examples are a subset of the 3244 "Command A" ones,
-        # and 125 of those 2272 translations differ. So this is the same model
-        # evaluated twice, which EEE represents as two result files in one model
-        # folder, distinguished by evaluation_id and ltb_display_name. Collapsing
-        # them into a single record would mean silently dropping one of the two
-        # translations for 2272 examples.
-        "id": "cohere/command-a", "developer": "Cohere",
-        "platform": "cohere", "deployment": "externally_managed", "availability": "open_weights",
-    },
+    # NOTE: "Cohere Command A" is not a registry entry. It is the same model as
+    # "Command A" run twice, and MODEL_ALIASES folds it into that one. See below.
 
     # --- Human reference (only emitted with --include-human) ---
     "human": {
@@ -442,6 +432,25 @@ MODEL_REGISTRY: dict[str, dict] = {
 }
 
 NEEDS_REVIEW_KEY = _R
+
+# ---------------------------------------------------------------------------
+# Aliases: two LTB display names, one model run twice
+# ---------------------------------------------------------------------------
+# {alias display name: canonical display name}. The alias's examples are folded
+# into the canonical record, and where both scored the same example the
+# canonical one wins.
+#
+# `Cohere Command A` is `Command A` served directly by Cohere instead of through
+# OpenRouter, confirmed by the LTB authors on issue #249. It is the same model
+# run twice, so it becomes one record rather than two. Nothing is lost by
+# preferring `Command A`: all 2272 `Cohere Command A` examples are already inside
+# the 3244 `Command A` ones, so the merged record is exactly the `Command A` run.
+#
+# A display name in here must NOT also be in MODEL_REGISTRY; the alias is
+# resolved before the registry is consulted.
+MODEL_ALIASES: dict[str, str] = {
+    "Cohere Command A": "Command A",
+}
 
 # Translations whose `model` value starts with one of these is dropped, mirroring
 # scripts/03a-prepare_release.py.
