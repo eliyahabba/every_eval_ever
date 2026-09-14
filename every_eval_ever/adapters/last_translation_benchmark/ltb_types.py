@@ -51,6 +51,7 @@ class Stats:
     models_seen: int = 0
     models_unknown: list[str] = field(default_factory=list)
     models_thin: dict[str, int] = field(default_factory=dict)
+    aliases_merged: dict[str, dict] = field(default_factory=dict)
     skipped_no_translation: int = 0
     skipped_unverified: int = 0
     missing_translations: int = 0
