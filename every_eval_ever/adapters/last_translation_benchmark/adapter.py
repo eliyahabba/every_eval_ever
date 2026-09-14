@@ -53,6 +53,7 @@ from .ltb_constants import (
     LTB_HF_REPO,
     METRIC_PASS_RATE,
     METRIC_RULE_PASS_RATE,
+    MODEL_ALIASES,
     MODEL_PREFIX_BLOCKLIST,
     MODEL_REGISTRY,
     NEEDS_REVIEW_KEY,
@@ -192,8 +193,39 @@ def collect_outcomes(
                 )
             )
 
+    merge_aliases(by_model, stats)
     stats.models_seen = len(by_model)
     return by_model
+
+
+def merge_aliases(by_model: dict[str, list[Outcome]], stats: Stats) -> None:
+    """Fold aliased display names into their canonical system, in place.
+
+    Some systems appear under two LTB display names because they were run twice
+    through different providers. MODEL_ALIASES says which name is canonical; on
+    an example both scored, the canonical run wins. Emitting them as two records
+    would make one model look like two to every consumer of the datastore.
+    """
+    for alias, canonical in MODEL_ALIASES.items():
+        alias_outcomes = by_model.pop(alias, None)
+        if not alias_outcomes:
+            continue
+        canonical_outcomes = by_model.setdefault(canonical, [])
+        already = {o.example_id for o in canonical_outcomes}
+        added = [o for o in alias_outcomes if o.example_id not in already]
+        canonical_outcomes.extend(added)
+        stats.aliases_merged[alias] = {
+            "canonical": canonical,
+            "alias_examples": len(alias_outcomes),
+            "contributed": len(added),
+            "overridden_by_canonical": len(alias_outcomes) - len(added),
+        }
+        logger.info(
+            "merged %r into %r: %d of its %d examples were already covered by "
+            "%r and kept from there, %d added",
+            alias, canonical, len(alias_outcomes) - len(added), len(alias_outcomes),
+            canonical, len(added),
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -326,6 +358,9 @@ def build_aggregate(
     evaluation_result_id is the documented foreign key for instance rows, so
     both get the display name appended. Every colliding entry is suffixed (not
     just the later one), so the ids do not depend on iteration order.
+
+    MODEL_ALIASES already merges the display names that are known to be one
+    model run twice, so in practice this is a guard for a future collision.
     """
     model_key = model.model_id.replace("/", "_")
     suffix = ""
@@ -368,6 +403,14 @@ def build_aggregate(
         "model_availability": model.availability,
         "ltb_display_name": model.display_name,
     }
+    merged_from = sorted(a for a, c in MODEL_ALIASES.items() if c == model.display_name)
+    if merged_from:
+        model_details["ltb_merged_display_names"] = "; ".join(merged_from)
+        model_details["ltb_merge_note"] = (
+            "the same model run twice under two LTB display names; this record is the "
+            f"{model.display_name!r} run, which already covers every example the other "
+            "one scored"
+        )
     if model.needs_review:
         model_details["id_provenance"] = model.needs_review
 
@@ -653,7 +696,8 @@ def main() -> int:
             logger.warning(
                 "model id %s is shared by %d LTB display names (%s); writing one result "
                 "file per display name in the same folder, with the display name appended to "
-                "evaluation_id and evaluation_result_id - merge them if they are one run",
+                "evaluation_id and evaluation_result_id - add a MODEL_ALIASES entry if they "
+                "are one model run twice",
                 model_id, len(names), ", ".join(names),
             )
 
